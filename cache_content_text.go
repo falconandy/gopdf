@@ -133,6 +133,14 @@ func FormatFloatTrim(floatval float64) (formatted string) {
 	return strconv.FormatFloat(roundedFontSize, 'f', -1, 64)
 }
 
+func AppendFloatTrim(dst []byte, floatval float64) []byte {
+	const precisionFactor = 1000.0
+	roundedFontSize := math.Round(precisionFactor*floatval) / precisionFactor
+	return strconv.AppendFloat(dst, roundedFontSize, 'f', -1, 64)
+}
+
+var floatBuf = make([]byte, 0, 24)
+
 func (c *cacheContentText) write(w io.Writer, protection *PDFProtection) error {
 	x, err := c.calX()
 	if err != nil {
@@ -155,7 +163,11 @@ func (c *cacheContentText) write(w io.Writer, protection *PDFProtection) error {
 	}
 
 	fmt.Fprintf(w, "%0.2f %0.2f TD\n", x, y)
-	fmt.Fprintf(w, "/F%d %s Tf %s Tc\n", c.fontCountIndex, FormatFloatTrim(c.fontSize), FormatFloatTrim(c.charSpacing))
+	fmt.Fprintf(w, "/F%d ", c.fontCountIndex)
+	w.Write(AppendFloatTrim(floatBuf, c.fontSize))
+	fmt.Fprint(w, " Tf ")
+	w.Write(AppendFloatTrim(floatBuf, c.charSpacing))
+	fmt.Fprint(w, " Tc\n")
 
 	if c.txtColorMode == "color" {
 		c.textColor.write(w, protection)
@@ -329,10 +341,7 @@ func createContent(f *SubsetFontObj, text string, fontSize float64, charSpacing 
 			pairvalPdfUnit = convertTTFUnit2PDFUnit(int(pairval), unitsPerEm)
 		}
 
-		width, err := f.CharWidth(r)
-		if err != nil {
-			return 0, 0, 0, err
-		}
+		width := f.GlyphIndexToPdfWidth(glyphindex)
 
 		unitsPerPt := float64(unitsPerEm) / fontSize
 		spaceWidthInPt := unitsPerPt * charSpacing
@@ -356,6 +365,44 @@ func createContent(f *SubsetFontObj, text string, fontSize float64, charSpacing 
 	}
 	textWidthPdfUnit := float64(sumWidth) * (float64(fontSize) / 1000.0)
 	return cellWidthPdfUnit, cellHeightPdfUnit, textWidthPdfUnit, nil
+}
+
+func createNextRuneContent(f *SubsetFontObj, r, leftRune rune, fontSize float64, charSpacing float64) (float64, error) {
+
+	unitsPerEm := int(f.ttfp.UnitsPerEm())
+	var leftRuneIndex uint
+	if leftRune != 0 {
+		var err error
+		leftRuneIndex, err = f.CharIndex(r)
+		if err != nil && err != ErrCharNotFound {
+			return 0, err
+		}
+	}
+	//fmt.Printf("unitsPerEm = %d", unitsPerEm)
+
+	glyphindex, err := f.CharIndex(r)
+	if err == ErrCharNotFound {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+
+	pairvalPdfUnit := 0
+	if leftRune != 0 && f.ttfFontOption.UseKerning { //kerning
+		pairval := kern(f, leftRune, r, leftRuneIndex, glyphindex)
+		pairvalPdfUnit = convertTTFUnit2PDFUnit(int(pairval), unitsPerEm)
+	}
+
+	width := f.GlyphIndexToPdfWidth(glyphindex)
+
+	unitsPerPt := float64(unitsPerEm) / fontSize
+	spaceWidthInPt := unitsPerPt * charSpacing
+	spaceWidthPdfUnit := convertTTFUnit2PDFUnit(int(spaceWidthInPt), unitsPerEm)
+
+	sumWidth := int(width) + pairvalPdfUnit + spaceWidthPdfUnit
+
+	textWidthPdfUnit := float64(sumWidth) * (float64(fontSize) / 1000.0)
+	return textWidthPdfUnit, nil
 }
 
 func kern(f *SubsetFontObj, leftRune rune, rightRune rune, leftIndex uint, rightIndex uint) int16 {

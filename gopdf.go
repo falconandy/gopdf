@@ -43,9 +43,10 @@ type GoPdf struct {
 	//topMargin  float64
 	margins Margins
 
-	pdfObjs []IObj
-	config  Config
-	anchors map[string]anchorOption
+	pdfObjs                []IObj
+	config                 Config
+	configUnitConfigurator unitConfigurator
+	anchors                map[string]anchorOption
 
 	indexOfCatalogObj int
 
@@ -877,6 +878,7 @@ func (gp *GoPdf) StartWithImporter(config Config, importer *gofpdi.Importer) {
 func (gp *GoPdf) start(config Config, importer ...*gofpdi.Importer) {
 
 	gp.config = config
+	gp.configUnitConfigurator = &gp.config
 	gp.init(importer...)
 	//init all basic obj
 	catalog := new(CatalogObj)
@@ -1324,25 +1326,26 @@ func (gp *GoPdf) SplitTextWithOption(text string, width float64, opt *BreakOptio
 	if opt == nil {
 		opt = &DefaultBreakOption
 	}
-	var lineText []rune
-	var lineTexts []string
 	utf8Texts := []rune(text)
 	utf8TextsLen := len(utf8Texts) // utf8 string quantity
 	if utf8TextsLen == 0 {
-		return lineTexts, ErrEmptyString
+		return nil, ErrEmptyString
 	}
+	lineText := make([]rune, 0, len(utf8Texts))
+	lineTexts := make([]string, 0, 3)
 	separatorWidth, err := gp.MeasureTextWidth(opt.Separator)
 	if err != nil {
 		return nil, err
 	}
 	// possible (not conflicting) position of the separator within the currently processed line
 	separatorIdx := 0
+	var lineWidth float64
 	for i := 0; i < utf8TextsLen; i++ {
-		lineWidth, err := gp.MeasureTextWidth(string(lineText))
-		if err != nil {
-			return nil, err
+		var leftRune rune
+		if len(lineText) > 0 {
+			leftRune = lineText[len(lineText)-1]
 		}
-		runeWidth, err := gp.MeasureTextWidth(string(utf8Texts[i]))
+		runeWidth, err := gp.MeasureNextRuneWidth(utf8Texts[i], leftRune)
 		if err != nil {
 			return nil, err
 		}
@@ -1352,11 +1355,11 @@ func (gp *GoPdf) SplitTextWithOption(text string, width float64, opt *BreakOptio
 			// strict break to not exceed the desired width
 			forceBreak := false
 			if opt.Mode == BreakModeIndicatorSensitive {
-				forceBreak = !performIndicatorSensitiveLineBreak(&lineTexts, &lineText, &i, opt)
+				forceBreak = !performIndicatorSensitiveLineBreak(&lineTexts, &lineText, &i, &lineWidth, opt)
 			}
 			// BreakModeStrict breaks immediately with an optionally available separator
 			if opt.Mode == BreakModeStrict || forceBreak {
-				performStrictLineBreak(&lineTexts, &lineText, &i, separatorIdx, opt)
+				performStrictLineBreak(&lineTexts, &lineText, &i, &lineWidth, separatorIdx, opt)
 			}
 			continue
 		}
@@ -1364,6 +1367,7 @@ func (gp *GoPdf) SplitTextWithOption(text string, width float64, opt *BreakOptio
 		if utf8Texts[i] == '\n' {
 			lineTexts = append(lineTexts, string(lineText))
 			lineText = lineText[0:0]
+			lineWidth = 0
 			continue
 		}
 		// end of text
@@ -1375,7 +1379,9 @@ func (gp *GoPdf) SplitTextWithOption(text string, width float64, opt *BreakOptio
 		if opt.HasSeparator() && lineWidth+runeWidth+separatorWidth <= width {
 			separatorIdx = i
 		}
+
 		lineText = append(lineText, utf8Texts[i])
+		lineWidth += runeWidth
 	}
 	return lineTexts, nil
 }
@@ -1443,7 +1449,7 @@ func (gp *GoPdf) FillInPlaceHoldText(placeHolderName string, text string, align 
 		if err != nil {
 			return err
 		}
-		width := pointsToUnits(gp.config, textWidthPdfUnit)
+		width := pointsToUnits(gp.configUnitConfigurator, textWidthPdfUnit)
 
 		if align == Right {
 			diff := info.placeHolderWidth - width
@@ -1457,7 +1463,7 @@ func (gp *GoPdf) FillInPlaceHoldText(placeHolderName string, text string, align 
 	return nil
 }
 
-func performIndicatorSensitiveLineBreak(lineTexts *[]string, lineText *[]rune, i *int, opt *BreakOption) bool {
+func performIndicatorSensitiveLineBreak(lineTexts *[]string, lineText *[]rune, i *int, lineWidth *float64, opt *BreakOption) bool {
 	brIdx := breakIndicatorIndex(*lineText, opt.BreakIndicator)
 	if brIdx > 0 {
 		diff := len(*lineText) - brIdx
@@ -1465,12 +1471,13 @@ func performIndicatorSensitiveLineBreak(lineTexts *[]string, lineText *[]rune, i
 		*lineTexts = append(*lineTexts, string(*lineText))
 		*lineText = (*lineText)[0:0]
 		*i -= diff
+		*lineWidth = 0
 		return true
 	}
 	return false
 }
 
-func performStrictLineBreak(lineTexts *[]string, lineText *[]rune, i *int, separatorIdx int, opt *BreakOption) {
+func performStrictLineBreak(lineTexts *[]string, lineText *[]rune, i *int, lineWidth *float64, separatorIdx int, opt *BreakOption) {
 	if opt.HasSeparator() && separatorIdx > -1 {
 		// trim the line to the last possible index with an appended separator
 		trimIdx := *i - separatorIdx
@@ -1480,10 +1487,12 @@ func performStrictLineBreak(lineTexts *[]string, lineText *[]rune, i *int, separ
 		*lineTexts = append(*lineTexts, string(*lineText))
 		*lineText = (*lineText)[0:0]
 		*i = separatorIdx - 1
+		*lineWidth = 0
 		return
 	}
 	*lineTexts = append(*lineTexts, string(*lineText))
 	*lineText = (*lineText)[0:0]
+	*lineWidth = 0
 	*i--
 }
 
@@ -1875,7 +1884,21 @@ func (gp *GoPdf) MeasureTextWidth(text string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return pointsToUnits(gp.config, textWidthPdfUnit), nil
+	return pointsToUnits(gp.configUnitConfigurator, textWidthPdfUnit), nil
+}
+
+func (gp *GoPdf) MeasureNextRuneWidth(r, leftRune rune) (float64, error) {
+
+	r, err := gp.curr.FontISubset.AddRune(r) //AddChars for create CharacterToGlyphIndex
+	if err != nil {
+		return 0, err
+	}
+
+	textWidthPdfUnit, err := createNextRuneContent(gp.curr.FontISubset, r, leftRune, gp.curr.FontSize, gp.curr.CharSpacing)
+	if err != nil {
+		return 0, err
+	}
+	return pointsToUnits(gp.configUnitConfigurator, textWidthPdfUnit), nil
 }
 
 // MeasureCellHeightByText : measure Height of cell by text (use current font)
@@ -1890,7 +1913,7 @@ func (gp *GoPdf) MeasureCellHeightByText(text string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return pointsToUnits(gp.config, cellHeightPdfUnit), nil
+	return pointsToUnits(gp.configUnitConfigurator, cellHeightPdfUnit), nil
 }
 
 // Curve Draws a Bézier curve (the Bézier curve is tangent to the line between the control points at either end of the curve)
@@ -2131,22 +2154,22 @@ func (gp *GoPdf) resetCurrXY() {
 
 // UnitsToPoints converts the units to the documents unit type
 func (gp *GoPdf) UnitsToPoints(u float64) float64 {
-	return unitsToPoints(gp.config, u)
+	return unitsToPoints(gp.configUnitConfigurator, u)
 }
 
 // UnitsToPointsVar converts the units to the documents unit type for all variables passed in
 func (gp *GoPdf) UnitsToPointsVar(u ...*float64) {
-	unitsToPointsVar(gp.config, u...)
+	unitsToPointsVar(gp.configUnitConfigurator, u...)
 }
 
 // PointsToUnits converts the points to the documents unit type
 func (gp *GoPdf) PointsToUnits(u float64) float64 {
-	return pointsToUnits(gp.config, u)
+	return pointsToUnits(gp.configUnitConfigurator, u)
 }
 
 // PointsToUnitsVar converts the points to the documents unit type for all variables passed in
 func (gp *GoPdf) PointsToUnitsVar(u ...*float64) {
-	pointsToUnitsVar(gp.config, u...)
+	pointsToUnitsVar(gp.configUnitConfigurator, u...)
 }
 
 func (gp *GoPdf) isUseProtection() bool {

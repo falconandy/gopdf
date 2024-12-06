@@ -25,6 +25,7 @@ type SubsetFontObj struct {
 	ttfFontOption         TtfOption
 	funcKernOverride      FuncKernOverride
 	funcGetRoot           func() *GoPdf
+	addCharsBuff          []rune
 }
 
 func (s *SubsetFontObj) init(funcGetRoot func() *GoPdf) {
@@ -134,33 +135,39 @@ func (s *SubsetFontObj) SetTTFData(data []byte) error {
 
 // AddChars add char to map CharacterToGlyphIndex
 func (s *SubsetFontObj) AddChars(txt string) (string, error) {
-	var buff []rune
+	s.addCharsBuff = s.addCharsBuff[:0]
 	for _, runeValue := range txt {
-		if s.CharacterToGlyphIndex.KeyExists(runeValue) {
-			buff = append(buff, runeValue)
-			continue
-		}
-		glyphIndex, err := s.CharCodeToGlyphIndex(runeValue)
-		if err == ErrGlyphNotFound {
-			//never return error on this, just call function OnGlyphNotFound
-			if s.ttfFontOption.OnGlyphNotFound != nil {
-				s.ttfFontOption.OnGlyphNotFound(runeValue)
-			}
-			//start: try to find rune for replace
-			alreadyExists, runeValueReplace, glyphIndexReplace := s.replaceGlyphThatNotFound(runeValue)
-			if !alreadyExists {
-				s.CharacterToGlyphIndex.Set(runeValueReplace, glyphIndexReplace) // [runeValue] = glyphIndex
-			}
-			//end: try to find rune for replace
-			buff = append(buff, runeValueReplace)
-			continue
-		} else if err != nil {
+		r, err := s.AddRune(runeValue)
+		if err != nil {
 			return "", err
 		}
-		s.CharacterToGlyphIndex.Set(runeValue, glyphIndex) // [runeValue] = glyphIndex
-		buff = append(buff, runeValue)
+		s.addCharsBuff = append(s.addCharsBuff, r)
 	}
-	return string(buff), nil
+	return string(s.addCharsBuff), nil
+}
+
+func (s *SubsetFontObj) AddRune(r rune) (rune, error) {
+	if s.CharacterToGlyphIndex.KeyExists(r) {
+		return r, nil
+	}
+	glyphIndex, err := s.CharCodeToGlyphIndex(r)
+	if err == ErrGlyphNotFound {
+		//never return error on this, just call function OnGlyphNotFound
+		if s.ttfFontOption.OnGlyphNotFound != nil {
+			s.ttfFontOption.OnGlyphNotFound(r)
+		}
+		//start: try to find rune for replace
+		alreadyExists, runeValueReplace, glyphIndexReplace := s.replaceGlyphThatNotFound(r)
+		if !alreadyExists {
+			s.CharacterToGlyphIndex.Set(runeValueReplace, glyphIndexReplace) // [runeValue] = glyphIndex
+		}
+		//end: try to find rune for replace
+		return runeValueReplace, nil
+	} else if err != nil {
+		return 0, err
+	}
+	s.CharacterToGlyphIndex.Set(r, glyphIndex) // [runeValue] = glyphIndex
+	return r, nil
 }
 
 /*
