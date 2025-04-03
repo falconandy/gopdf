@@ -26,14 +26,44 @@ type CellStyle struct {
 	FontSize    float64     // Font size for the cell text
 }
 
+type RowCell struct {
+	content      string    // Content (display value) of the cell
+	useCellStyle bool      // If true, use cellStyle instead of the style in the tableLayout
+	cellStyle    CellStyle // Style of the cell
+}
+
+func NewRowCell(content string, cellStyle CellStyle) RowCell {
+	return newStyledRowCell(content, true, cellStyle)
+
+}
+
+func newStyledRowCell(content string, useCellStyle bool, cellStyle CellStyle) RowCell {
+	return RowCell{
+		content:      content,
+		useCellStyle: useCellStyle,
+		cellStyle:    cellStyle,
+	}
+}
+
+type TableLayout interface {
+	AddColumn(header string, width float64, align string)
+	AddRow(row []string)
+	AddStyledRow(row []RowCell)
+	SetTableStyle(style CellStyle)
+	SetHeaderStyle(style CellStyle)
+	SetCellStyle(style CellStyle)
+	DrawTable() error
+}
+
 // Represents the layout of a table
 type tableLayout struct {
-	pdf         *GoPdf     // Reference to the GoPdf instance
-	startX      float64    // Starting X coordinate of the table
-	startY      float64    // Starting Y coordinate of the table
-	rowHeight   float64    // Height of each row in the table
-	columns     []column   // Slice of column definitions
-	rows        [][]string // Slice of rows, each containing cell contents
+	pdf       *GoPdf      // Reference to the GoPdf instance
+	startX    float64     // Starting X coordinate of the table
+	startY    float64     // Starting Y coordinate of the table
+	rowHeight float64     // Height of each row in the table
+	columns   []column    // Slice of column definitions
+	rows      [][]RowCell // Slice of rows, each containing cell contents
+	//styledRows   [][]RowCell // Slice of rows, each containing cell contents and styles.
 	maxRows     int        // Maximum number of rows in the table
 	padding     float64    // Padding inside each cell
 	cellOption  CellOption // Options for cell content rendering
@@ -41,6 +71,8 @@ type tableLayout struct {
 	headerStyle CellStyle  // Style for the header row
 	cellStyle   CellStyle  // Style for regular cells
 }
+
+var _ TableLayout = (*tableLayout)(nil)
 
 // Represents a column in the table
 type column struct {
@@ -50,7 +82,7 @@ type column struct {
 }
 
 // Creates a new table layout with the given parameters
-func (gp *GoPdf) NewTableLayout(startX, startY, rowHeight float64, maxRows int) *tableLayout {
+func (gp *GoPdf) NewTableLayout(startX, startY, rowHeight float64, maxRows int) TableLayout {
 	return &tableLayout{
 		pdf:       gp,
 		startX:    startX,
@@ -98,6 +130,16 @@ func (t *tableLayout) AddColumn(header string, width float64, align string) {
 
 // Adds a row of data to the table
 func (t *tableLayout) AddRow(row []string) {
+	rowCell := make([]RowCell, len(row))
+	for i, cell := range row {
+		rowCell[i] = newStyledRowCell(cell, false, CellStyle{})
+	}
+	t.rows = append(t.rows, rowCell)
+}
+
+// Adds a row of data to the table with individual styled cells
+// Useful for styling individual cells in a row
+func (t *tableLayout) AddStyledRow(row []RowCell) {
 	t.rows = append(t.rows, row)
 }
 
@@ -123,7 +165,16 @@ func (t *tableLayout) DrawTable() error {
 
 	// Draw the header row
 	for _, col := range t.columns {
-		if err := t.drawCell(x, y, col.width, t.rowHeight, col.header, "center", true); err != nil {
+		if err := t.drawCell(
+			x,
+			y,
+			col.width,
+			t.rowHeight,
+			col.header,
+			"center",
+			true, /*isHeader*/
+			t.headerStyle,
+		); err != nil {
 			return err
 		}
 		x += col.width
@@ -134,7 +185,20 @@ func (t *tableLayout) DrawTable() error {
 	for _, row := range t.rows {
 		x = t.startX
 		for i, cell := range row {
-			if err := t.drawCell(x, y, t.columns[i].width, t.rowHeight, cell, t.columns[i].align, false); err != nil {
+			cellStyle := t.cellStyle
+			if cell.useCellStyle {
+				cellStyle = cell.cellStyle
+			}
+			if err := t.drawCell(
+				x,
+				y,
+				t.columns[i].width,
+				t.rowHeight,
+				cell.content,
+				t.columns[i].align,
+				false, /*isHeader*/
+				cellStyle,
+			); err != nil {
 				return err
 			}
 			x += t.columns[i].width
@@ -146,7 +210,16 @@ func (t *tableLayout) DrawTable() error {
 	for i := len(t.rows); i < t.maxRows; i++ {
 		x = t.startX
 		for _, col := range t.columns {
-			if err := t.drawCell(x, y, col.width, t.rowHeight, "", col.align, false); err != nil {
+			if err := t.drawCell(
+				x,
+				y,
+				col.width,
+				t.rowHeight,
+				"",
+				col.align,
+				false, /*isHeader*/
+				t.cellStyle,
+			); err != nil {
 				return err
 			}
 			x += col.width
@@ -184,12 +257,16 @@ func (t *tableLayout) drawTableAndHeaderBorder() error {
 }
 
 // Draws a single cell of the table
-func (t *tableLayout) drawCell(x, y, width, height float64, content, align string, isHeader bool) error {
-	style := t.cellStyle
-	if isHeader {
-		style = t.headerStyle
-	}
-
+func (t *tableLayout) drawCell(
+	x float64,
+	y float64,
+	width float64,
+	height float64,
+	content string,
+	align string,
+	isHeader bool,
+	style CellStyle,
+) error {
 	// Fill the cell background if a fill color is specified
 	if style.FillColor != (RGBColor{}) {
 		t.pdf.SetFillColor(style.FillColor.R, style.FillColor.G, style.FillColor.B)
@@ -238,9 +315,12 @@ func (t *tableLayout) drawCell(x, y, width, height float64, content, align strin
 
 // Draws a border around a rectangular area
 func (t *tableLayout) drawBorder(x1, y1, x2, y2 float64, borderStyle BorderStyle) error {
+	if borderStyle.Width <= 0 {
+		return nil
+	}
 	t.pdf.SetLineWidth(borderStyle.Width)
 	t.pdf.SetStrokeColor(borderStyle.RGBColor.R, borderStyle.RGBColor.G, borderStyle.RGBColor.B)
-	half := borderStyle.Width / 2
+	half := borderStyle.Width / 2.0
 
 	// Draw each side of the border if specified
 	if borderStyle.Top {
