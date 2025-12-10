@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	_ "image/gif"
+	//_ "image/gif"
 	"image/png"
 	"io"
 	"os"

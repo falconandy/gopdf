@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/jpeg"
+	//"image/jpeg"
 	"image/png"
 	"io"
 	"log"
@@ -765,8 +765,8 @@ func (gp *GoPdf) ImageFromWithOption(img image.Image, opts ImageFromOption) erro
 		switch opts.Format {
 		case "png":
 			err = png.Encode(bw, img)
-		case "jpeg":
-			err = jpeg.Encode(bw, img, nil)
+			//case "jpeg":
+			//	err = jpeg.Encode(bw, img, nil)
 		}
 
 		bw.Flush()
@@ -1587,15 +1587,15 @@ func (gp *GoPdf) ImportPageStream(sourceStream *io.ReadSeeker, pageno int, box s
 // GetStreamPageSizes gets the sizes of the pages using a stream
 // Returns a map of available pages and its box sizes starting with the first page at index 1 containing a map of boxes containing a map of size values
 func (gp *GoPdf) GetStreamPageSizes(sourceStream *io.ReadSeeker) map[int]map[string]map[string]float64 {
-        gp.fpdi.SetSourceStream(sourceStream)
-        return gp.fpdi.GetPageSizes()
+	gp.fpdi.SetSourceStream(sourceStream)
+	return gp.fpdi.GetPageSizes()
 }
 
 // GetPageSizes gets the sizes of the pages of a pdf file1
 // Returns a map of available pages and its box sizes starting with the first page at index 1 containing a map of boxes containing a map of size values
 func (gp *GoPdf) GetPageSizes(sourceFile string) map[int]map[string]map[string]float64 {
-        gp.fpdi.SetSourceFile(sourceFile)
-        return gp.fpdi.GetPageSizes()
+	gp.fpdi.SetSourceFile(sourceFile)
+	return gp.fpdi.GetPageSizes()
 }
 
 // UseImportedTemplate draws an imported PDF page.
