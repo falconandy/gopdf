@@ -33,7 +33,3 @@ func (p *PagesObj) write(w io.Writer, objID int) error {
 func (p *PagesObj) getType() string {
 	return "Pages"
 }
-
-func (p *PagesObj) test() {
-	fmt.Print(p.getType() + "\n")
-}

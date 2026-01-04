@@ -6,41 +6,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"image"
-	"image/color"
-	//_ "image/gif"
-	"image/png"
 	"io"
-	"os"
 	"strings"
 )
 
-type ColorSpaces string
-
-const (
-	DeviceGray = "DeviceGray"
-)
-
-func writeMaskImgProps(w io.Writer, imginfo imgInfo) error {
-	if err := writeBaseImgProps(w, imginfo, DeviceGray); err != nil {
-		return err
-	}
-
-	decode := "\t/DecodeParms <<\n"
-	decode += "\t\t/Predictor 15\n"
-	decode += "\t\t/Colors 1\n"
-	decode += "\t\t/BitsPerComponent 8\n"
-	decode += fmt.Sprintf("\t\t/Columns %d\n", imginfo.w)
-	decode += "\t>>\n"
-
-	if _, err := io.WriteString(w, decode); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func writeImgProps(w io.Writer, imginfo imgInfo, splittedMask bool) error {
+func writeImgProps(w io.Writer, imginfo imgInfo) error {
 	if err := writeBaseImgProps(w, imginfo, imginfo.colspace); err != nil {
 		return err
 	}
@@ -49,10 +19,6 @@ func writeImgProps(w io.Writer, imginfo imgInfo, splittedMask bool) error {
 		if _, err := fmt.Fprintf(w, "\t/DecodeParms <<%s>>\n", imginfo.decodeParms); err != nil {
 			return err
 		}
-	}
-
-	if splittedMask {
-		return nil
 	}
 
 	if imginfo.trns != nil && len(imginfo.trns) > 0 {
@@ -69,12 +35,6 @@ func writeImgProps(w io.Writer, imginfo imgInfo, splittedMask bool) error {
 		content += "\t]\n"
 
 		if _, err := io.WriteString(w, content); err != nil {
-			return err
-		}
-	}
-
-	if haveSMask(imginfo) {
-		if _, err := fmt.Fprintf(w, "\t/SMask %d 0 R\n", imginfo.smarkObjID+1); err != nil {
 			return err
 		}
 	}
@@ -119,67 +79,13 @@ func isColspaceIndexed(imginfo imgInfo) bool {
 	return false
 }
 
-func haveSMask(imginfo imgInfo) bool {
-	if imginfo.smask != nil && len(imginfo.smask) > 0 {
-		return true
-	}
-	return false
-}
-
-func parseImgByPath(path string) (imgInfo, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return imgInfo{}, err
-	}
-	return parseImg(bytes.NewReader(data))
-}
-
 func parseImg(raw *bytes.Reader) (imgInfo, error) {
 	// fmt.Printf("----------\n")
 	var info imgInfo
-	raw.Seek(0, 0)
-	imgConfig, formatname, err := image.DecodeConfig(raw)
+
+	err := parsePng(raw, &info)
 	if err != nil {
 		return info, err
-	}
-	info.formatName = formatname
-
-	if formatname == "jpeg" {
-
-		err = parseImgJpg(&info, imgConfig)
-		if err != nil {
-			return info, err
-		}
-		raw.Seek(0, 0)
-		info.data, err = io.ReadAll(raw)
-		if err != nil {
-			return info, err
-		}
-
-	} else if formatname == "png" {
-		err = parsePng(raw, &info, imgConfig)
-		if err != nil {
-			return info, err
-		}
-	} else if formatname == "gif" {
-		// Convert to png
-		raw.Seek(0, 0)
-		var img image.Image
-		img, _, err = image.Decode(raw)
-		if err != nil {
-			return info, err
-		}
-		pngBuf := new(bytes.Buffer)
-		err = png.Encode(pngBuf, img)
-		if err != nil {
-			return info, err
-		}
-		info, err = parseImg(bytes.NewReader(pngBuf.Bytes()))
-		if err != nil {
-			return info, err
-		}
-	} else {
-		return info, fmt.Errorf("Image format %v is not supported", formatname)
 	}
 
 	// fmt.Printf("%#v\n", info)
@@ -187,30 +93,10 @@ func parseImg(raw *bytes.Reader) (imgInfo, error) {
 	return info, nil
 }
 
-func parseImgJpg(info *imgInfo, imgConfig image.Config) error {
-	switch imgConfig.ColorModel {
-	case color.YCbCrModel:
-		info.colspace = "DeviceRGB"
-	case color.GrayModel:
-		info.colspace = "DeviceGray"
-	case color.CMYKModel:
-		info.colspace = "DeviceCMYK"
-	default:
-		return errors.New("color model not support")
-	}
-	info.bitsPerComponent = "8"
-	info.filter = "DCTDecode"
-
-	info.h = imgConfig.Height
-	info.w = imgConfig.Width
-
-	return nil
-}
-
 var pngMagicNumber = []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
 var pngIHDR = []byte{0x49, 0x48, 0x44, 0x52}
 
-func parsePng(f *bytes.Reader, info *imgInfo, imgConfig image.Config) error {
+func parsePng(f *bytes.Reader, info *imgInfo) error {
 	// f := bytes.NewReader(raw)
 	f.Seek(0, 0)
 	b, err := readBytes(f, 8)
@@ -450,11 +336,6 @@ func parsePng(f *bytes.Reader, info *imgInfo, imgConfig image.Config) error {
 			}
 		}
 
-		info.smask, err = compress(alpha)
-		if err != nil {
-			return err
-		}
-
 		info.data, err = compress(color)
 		if err != nil {
 			return err
@@ -509,33 +390,4 @@ func readBytes(f *bytes.Reader, len int) ([]byte, error) {
 		return nil, err
 	}
 	return b, nil
-}
-
-func isDeviceRGB(formatname string, img *image.Image) bool {
-	if _, ok := (*img).(*image.YCbCr); ok {
-		return true
-	} else if _, ok := (*img).(*image.NRGBA); ok {
-		return true
-	}
-	return false
-}
-
-// ImgReactagleToWH  Rectangle to W and H
-func ImgReactagleToWH(imageRect image.Rectangle) (float64, float64) {
-	k := 1
-	w := -128 // init
-	h := -128 // init
-	if w < 0 {
-		w = -imageRect.Dx() * 72 / w / k
-	}
-	if h < 0 {
-		h = -imageRect.Dy() * 72 / h / k
-	}
-	if w == 0 {
-		w = h * imageRect.Dx() / imageRect.Dy()
-	}
-	if h == 0 {
-		h = w * imageRect.Dy() / imageRect.Dx()
-	}
-	return float64(w), float64(h)
 }
