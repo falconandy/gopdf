@@ -5,25 +5,6 @@ import (
 	"strings"
 )
 
-// StrHelperGetStringWidth get string width
-func StrHelperGetStringWidth(str string, fontSize int, ifont IFont) float64 {
-	return StrHelperGetStringWidthPrecise(str, float64(fontSize), ifont)
-}
-
-// StrHelperGetStringWidthPrecise get string width with real number fontSize
-func StrHelperGetStringWidthPrecise(str string, fontSize float64, ifont IFont) float64 {
-
-	w := 0
-	bs := []byte(str)
-	i := 0
-	max := len(bs)
-	for i < max {
-		w += ifont.GetCw()[bs[i]]
-		i++
-	}
-	return float64(w) * (float64(fontSize) / 1000.0)
-}
-
 // CreateEmbeddedFontSubsetName create Embedded font (subset font) name
 func CreateEmbeddedFontSubsetName(name string) string {
 	name = strings.Replace(name, " ", "+", -1)

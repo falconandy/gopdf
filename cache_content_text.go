@@ -8,10 +8,6 @@ import (
 	"strconv"
 )
 
-const defaultCoefLineHeight = float64(1)
-const defaultCoefUnderlinePosition = float64(1)
-const defaultcoefUnderlineThickness = float64(1)
-
 // ContentTypeCell cell
 const ContentTypeCell = 0
 
@@ -24,13 +20,11 @@ type cacheContentText struct {
 	//---setup---
 	rectangle      *Rect
 	textColor      ICacheColorText
-	grayFill       float64
 	txtColorMode   string
 	fontCountIndex int //Curr.FontFontCount+1
 	fontSize       float64
 	fontStyle      int
 	charSpacing    float64
-	setXCount      int //จำนวนครั้งที่ใช้ setX
 	x, y           float64
 	fontSubset     *SubsetFontObj
 	pageheight     float64
@@ -53,12 +47,10 @@ func (c *cacheContentText) isSame(cache cacheContentText) bool {
 	// if both colors are nil we assume them equal
 	if ((c.textColor == nil && cache.textColor == nil) ||
 		(c.textColor != nil && c.textColor.equal(cache.textColor))) &&
-		c.grayFill == cache.grayFill &&
 		c.fontCountIndex == cache.fontCountIndex &&
 		c.fontSize == cache.fontSize &&
 		c.fontStyle == cache.fontStyle &&
 		c.charSpacing == cache.charSpacing &&
-		c.setXCount == cache.setXCount &&
 		c.y == cache.y &&
 		c.isPlaceHolder == cache.isPlaceHolder {
 		return true
@@ -141,7 +133,7 @@ func AppendFloatTrim(dst []byte, floatval float64) []byte {
 
 var floatBuf = make([]byte, 0, 24)
 
-func (c *cacheContentText) write(w io.Writer, protection *PDFProtection) error {
+func (c *cacheContentText) write(w io.Writer) error {
 	x, err := c.calX()
 	if err != nil {
 		return err
@@ -149,13 +141,6 @@ func (c *cacheContentText) write(w io.Writer, protection *PDFProtection) error {
 	y, err := c.calY()
 	if err != nil {
 		return err
-	}
-
-	for _, extGStateIndex := range c.cellOpt.extGStateIndexes {
-		linkToGSObj := fmt.Sprintf("/GS%d gs\n", extGStateIndex)
-		if _, err := io.WriteString(w, linkToGSObj); err != nil {
-			return err
-		}
 	}
 
 	if _, err := io.WriteString(w, "BT\n"); err != nil {
@@ -170,13 +155,10 @@ func (c *cacheContentText) write(w io.Writer, protection *PDFProtection) error {
 	fmt.Fprint(w, " Tc\n")
 
 	if c.txtColorMode == "color" {
-		c.textColor.write(w, protection)
+		c.textColor.write(w)
 	}
 	io.WriteString(w, "[<")
 
-	unitsPerEm := int(c.fontSubset.ttfp.UnitsPerEm())
-	var leftRune rune
-	var leftRuneIndex uint
 	for i, r := range c.text {
 
 		glyphindex, err := c.fontSubset.CharIndex(r)
@@ -186,27 +168,21 @@ func (c *cacheContentText) write(w io.Writer, protection *PDFProtection) error {
 			return err
 		}
 
-		pairvalPdfUnit := 0
 		if i > 0 && c.fontSubset.ttfFontOption.UseKerning { //kerning
-			pairval := kern(c.fontSubset, leftRune, r, leftRuneIndex, glyphindex)
-			pairvalPdfUnit = convertTTFUnit2PDFUnit(int(pairval), unitsPerEm)
-			if pairvalPdfUnit != 0 {
-				fmt.Fprintf(w, ">%d<", (-1)*pairvalPdfUnit)
-			}
+			// FIXME
 		}
 
 		fmt.Fprintf(w, "%04X", glyphindex)
-		leftRune = r
-		leftRuneIndex = glyphindex
 	}
 
 	io.WriteString(w, ">] TJ\n")
 	io.WriteString(w, "ET\n")
 
 	if c.fontStyle&Underline == Underline {
-		if err := c.underline(w); err != nil {
-			return err
-		}
+		// FIXME
+		//if err := c.underline(w); err != nil {
+		//	return err
+		//}
 	}
 
 	c.drawBorder(w)
@@ -267,46 +243,6 @@ func (c *cacheContentText) drawBorder(w io.Writer) error {
 	return nil
 }
 
-func (c *cacheContentText) underline(w io.Writer) error {
-	if c.fontSubset == nil {
-		return errors.New("error AppendUnderline not found font")
-	}
-
-	coefLineHeight := defaultCoefLineHeight
-	if c.cellOpt.CoefLineHeight != 0 {
-		coefLineHeight = c.cellOpt.CoefLineHeight
-	}
-
-	coefUnderlinePosition := defaultCoefUnderlinePosition
-	if c.cellOpt.CoefUnderlinePosition != 0 {
-		coefUnderlinePosition = c.cellOpt.CoefUnderlinePosition
-	}
-
-	coefUnderlineThickness := defaultcoefUnderlineThickness
-	if c.cellOpt.CoefUnderlineThickness != 0 {
-		coefUnderlineThickness = c.cellOpt.CoefUnderlineThickness
-	}
-
-	ascenderPx := c.fontSubset.GetAscenderPx(c.fontSize)
-	descenderPx := -c.fontSubset.GetDescenderPx(c.fontSize)
-
-	contentHeight := ascenderPx + descenderPx
-	virtualHeight := coefLineHeight * float64(c.fontSize)
-	leading := (contentHeight - virtualHeight) / 2
-
-	baseline := ascenderPx + leading
-
-	underlinePositionPx := c.fontSubset.GetUnderlinePositionPx(c.fontSize) * coefUnderlinePosition
-	underlineThicknessPx := c.fontSubset.GetUnderlineThicknessPx(c.fontSize) * coefUnderlineThickness
-
-	yUnderlinePosition := c.pageHeight() - c.y + underlinePositionPx - baseline
-	if _, err := fmt.Fprintf(w, "%0.2f %0.2f %0.2f %0.2f re f\n", c.x, yUnderlinePosition, c.cellWidthPdfUnit, underlineThicknessPx); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (c *cacheContentText) createContent() (float64, float64, error) {
 
 	cellWidthPdfUnit, cellHeightPdfUnit, textWidthPdfUnit, err := createContent(c.fontSubset, c.text, c.fontSize, c.charSpacing, c.rectangle)
@@ -322,8 +258,6 @@ func (c *cacheContentText) createContent() (float64, float64, error) {
 func createContent(f *SubsetFontObj, text string, fontSize float64, charSpacing float64, rectangle *Rect) (float64, float64, float64, error) {
 
 	unitsPerEm := int(f.ttfp.UnitsPerEm())
-	var leftRune rune
-	var leftRuneIndex uint
 	sumWidth := int(0)
 	//fmt.Printf("unitsPerEm = %d", unitsPerEm)
 	for i, r := range text {
@@ -337,8 +271,7 @@ func createContent(f *SubsetFontObj, text string, fontSize float64, charSpacing 
 
 		pairvalPdfUnit := 0
 		if i > 0 && f.ttfFontOption.UseKerning { //kerning
-			pairval := kern(f, leftRune, r, leftRuneIndex, glyphindex)
-			pairvalPdfUnit = convertTTFUnit2PDFUnit(int(pairval), unitsPerEm)
+			// FIXME
 		}
 
 		width := f.GlyphIndexToPdfWidth(glyphindex)
@@ -348,8 +281,6 @@ func createContent(f *SubsetFontObj, text string, fontSize float64, charSpacing 
 		spaceWidthPdfUnit := convertTTFUnit2PDFUnit(int(spaceWidthInPt), unitsPerEm)
 
 		sumWidth += int(width) + int(pairvalPdfUnit) + spaceWidthPdfUnit
-		leftRune = r
-		leftRuneIndex = glyphindex
 	}
 
 	cellWidthPdfUnit := float64(0)
@@ -370,14 +301,6 @@ func createContent(f *SubsetFontObj, text string, fontSize float64, charSpacing 
 func createNextRuneContent(f *SubsetFontObj, r, leftRune rune, fontSize float64, charSpacing float64) (float64, error) {
 
 	unitsPerEm := int(f.ttfp.UnitsPerEm())
-	var leftRuneIndex uint
-	if leftRune != 0 {
-		var err error
-		leftRuneIndex, err = f.CharIndex(r)
-		if err != nil && err != ErrCharNotFound {
-			return 0, err
-		}
-	}
 	//fmt.Printf("unitsPerEm = %d", unitsPerEm)
 
 	glyphindex, err := f.CharIndex(r)
@@ -389,8 +312,7 @@ func createNextRuneContent(f *SubsetFontObj, r, leftRune rune, fontSize float64,
 
 	pairvalPdfUnit := 0
 	if leftRune != 0 && f.ttfFontOption.UseKerning { //kerning
-		pairval := kern(f, leftRune, r, leftRuneIndex, glyphindex)
-		pairvalPdfUnit = convertTTFUnit2PDFUnit(int(pairval), unitsPerEm)
+		// FIXME
 	}
 
 	width := f.GlyphIndexToPdfWidth(glyphindex)
@@ -403,70 +325,4 @@ func createNextRuneContent(f *SubsetFontObj, r, leftRune rune, fontSize float64,
 
 	textWidthPdfUnit := float64(sumWidth) * (float64(fontSize) / 1000.0)
 	return textWidthPdfUnit, nil
-}
-
-func kern(f *SubsetFontObj, leftRune rune, rightRune rune, leftIndex uint, rightIndex uint) int16 {
-
-	pairVal := int16(0)
-	if haveKerning, kval := f.KernValueByLeft(leftIndex); haveKerning {
-		if ok, v := kval.ValueByRight(rightIndex); ok {
-			pairVal = v
-		}
-	}
-
-	if f.funcKernOverride != nil {
-		pairVal = f.funcKernOverride(
-			leftRune,
-			rightRune,
-			leftIndex,
-			rightIndex,
-			pairVal,
-		)
-	}
-	return pairVal
-}
-
-// CacheContent Export cacheContent
-type CacheContent struct {
-	cacheContentText
-}
-
-// Setup setup all information for cacheContent
-func (c *CacheContent) Setup(rectangle *Rect,
-	textColor ICacheColorText,
-	grayFill float64,
-	fontCountIndex int, //Curr.FontFontCount+1
-	fontSize float64,
-	fontStyle int,
-	charSpacing float64,
-	setXCount int, //จำนวนครั้งที่ใช้ setX
-	x, y float64,
-	fontSubset *SubsetFontObj,
-	pageheight float64,
-	contentType int,
-	cellOpt CellOption,
-	lineWidth float64,
-) {
-	c.cacheContentText = cacheContentText{
-		fontSubset:     fontSubset,
-		rectangle:      rectangle,
-		textColor:      textColor,
-		grayFill:       grayFill,
-		fontCountIndex: fontCountIndex,
-		fontSize:       fontSize,
-		fontStyle:      fontStyle,
-		charSpacing:    charSpacing,
-		setXCount:      setXCount,
-		x:              x,
-		y:              y,
-		pageheight:     pageheight,
-		contentType:    ContentTypeCell,
-		cellOpt:        cellOpt,
-		lineWidth:      lineWidth,
-	}
-}
-
-// WriteTextToContent write text to content
-func (c *CacheContent) WriteTextToContent(text string) {
-	c.cacheContentText.text += text
 }

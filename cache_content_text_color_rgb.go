@@ -9,7 +9,7 @@ type cacheContentTextColorRGB struct {
 	r, g, b uint8
 }
 
-func (c cacheContentTextColorRGB) write(w io.Writer, protection *PDFProtection) error {
+func (c cacheContentTextColorRGB) write(w io.Writer) error {
 	fmt.Fprintf(w, "%.3f %.3f %.3f %s\n", float64(c.r)/255, float64(c.g)/255, float64(c.b)/255, colorTypeFillRGB)
 	return nil
 }

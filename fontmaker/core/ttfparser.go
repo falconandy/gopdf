@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -563,10 +562,10 @@ func (t *TTFParser) ParseName(fd *bytes.Reader) error {
 			//s := fmt.Sprintf("%s", string(tmpStmp)) //strings(stmp)
 			s := string(tmpStmp)
 			s = strings.Replace(s, strconv.Itoa(0), "", -1)
-			s, err = t.PregReplace("|[ \\[\\](){}<>/%]|", "", s)
-			if err != nil {
-				return err
-			}
+			//s, err = t.PregReplace("|[ \\[\\](){}<>/%]|", "", s)
+			//if err != nil {
+			//	return err
+			//}
 			t.postScriptName = s
 			break
 		}
@@ -577,16 +576,6 @@ func (t *TTFParser) ParseName(fd *bytes.Reader) error {
 	}
 
 	return nil
-}
-
-func (t *TTFParser) PregReplace(pattern string, replacement string, subject string) (string, error) {
-
-	reg, err := regexp.Compile(pattern)
-	if err != nil {
-		return "", err
-	}
-	str := reg.ReplaceAllString(subject, replacement)
-	return str, nil
 }
 
 // ParseCmap parse cmap table format 4 https://www.microsoft.com/typography/otspec/cmap.htm

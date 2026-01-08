@@ -9,7 +9,7 @@ type cacheContentLineType struct {
 	lineType string
 }
 
-func (c *cacheContentLineType) write(w io.Writer, protection *PDFProtection) error {
+func (c *cacheContentLineType) write(w io.Writer) error {
 	switch c.lineType {
 	case "dashed":
 		fmt.Fprint(w, "[5] 2 d\n")

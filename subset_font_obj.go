@@ -23,14 +23,12 @@ type SubsetFontObj struct {
 	indexObjCIDFont       int
 	indexObjUnicodeMap    int
 	ttfFontOption         TtfOption
-	funcKernOverride      FuncKernOverride
 	funcGetRoot           func() *GoPdf
 	addCharsBuff          []rune
 }
 
 func (s *SubsetFontObj) init(funcGetRoot func() *GoPdf) {
 	s.CharacterToGlyphIndex = NewMapOfCharacterToGlyphIndex() //make(map[rune]uint)
-	s.funcKernOverride = nil
 	s.funcGetRoot = funcGetRoot
 
 }
@@ -70,56 +68,12 @@ func (s *SubsetFontObj) GetFamily() string {
 
 // SetTtfFontOption set TtfOption must set before SetTTFByPath
 func (s *SubsetFontObj) SetTtfFontOption(option TtfOption) {
-	if option.OnGlyphNotFoundSubstitute == nil {
-		option.OnGlyphNotFoundSubstitute = DefaultOnGlyphNotFoundSubstitute
-	}
 	s.ttfFontOption = option
 }
 
 // GetTtfFontOption get TtfOption must set before SetTTFByPath
 func (s *SubsetFontObj) GetTtfFontOption() TtfOption {
 	return s.ttfFontOption
-}
-
-// KernValueByLeft find kern value from kern table by left
-func (s *SubsetFontObj) KernValueByLeft(left uint) (bool, *core.KernValue) {
-
-	if !s.ttfFontOption.UseKerning {
-		return false, nil
-	}
-
-	k := s.ttfp.Kern()
-	if k == nil {
-		return false, nil
-	}
-
-	if kval, ok := k.Kerning[left]; ok {
-		return true, &kval
-	}
-
-	return false, nil
-}
-
-// SetTTFByPath set ttf
-func (s *SubsetFontObj) SetTTFByPath(ttfpath string) error {
-	useKerning := s.ttfFontOption.UseKerning
-	s.ttfp.SetUseKerning(useKerning)
-	err := s.ttfp.Parse(ttfpath)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// SetTTFByReader set ttf
-func (s *SubsetFontObj) SetTTFByReader(rd io.Reader) error {
-	useKerning := s.ttfFontOption.UseKerning
-	s.ttfp.SetUseKerning(useKerning)
-	err := s.ttfp.ParseByReader(rd)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // SetTTFData set ttf
@@ -152,10 +106,6 @@ func (s *SubsetFontObj) AddRune(r rune) (rune, error) {
 	}
 	glyphIndex, err := s.CharCodeToGlyphIndex(r)
 	if err == ErrGlyphNotFound {
-		//never return error on this, just call function OnGlyphNotFound
-		if s.ttfFontOption.OnGlyphNotFound != nil {
-			s.ttfFontOption.OnGlyphNotFound(r)
-		}
 		//start: try to find rune for replace
 		alreadyExists, runeValueReplace, glyphIndexReplace := s.replaceGlyphThatNotFound(r)
 		if !alreadyExists {
@@ -207,18 +157,15 @@ func (s *SubsetFontObj) AddChars(txt string) error {
 // - rune for replace is found or not
 // - glyph index for replace
 func (s *SubsetFontObj) replaceGlyphThatNotFound(runeNotFound rune) (bool, rune, uint) {
-	if s.ttfFontOption.OnGlyphNotFoundSubstitute != nil {
-		runeForReplace := s.ttfFontOption.OnGlyphNotFoundSubstitute(runeNotFound)
-		if s.CharacterToGlyphIndex.KeyExists(runeForReplace) {
-			return true, runeForReplace, 0
-		}
-		glyphIndexForReplace, err := s.CharCodeToGlyphIndex(runeForReplace)
-		if err != nil {
-			return false, runeForReplace, 0
-		}
-		return false, runeForReplace, glyphIndexForReplace
+	runeForReplace := '\u0020'
+	if s.CharacterToGlyphIndex.KeyExists(runeForReplace) {
+		return true, runeForReplace, 0
 	}
-	return false, runeNotFound, 0
+	glyphIndexForReplace, err := s.CharCodeToGlyphIndex(runeForReplace)
+	if err != nil {
+		return false, runeForReplace, 0
+	}
+	return false, runeForReplace, glyphIndexForReplace
 }
 
 // CharIndex index of char in glyph table
@@ -226,15 +173,6 @@ func (s *SubsetFontObj) CharIndex(r rune) (uint, error) {
 	glyIndex, ok := s.CharacterToGlyphIndex.Val(r)
 	if ok {
 		return glyIndex, nil
-	}
-	return 0, ErrCharNotFound
-}
-
-// CharWidth with of char
-func (s *SubsetFontObj) CharWidth(r rune) (uint, error) {
-	glyIndex, ok := s.CharacterToGlyphIndex.Val(r)
-	if ok {
-		return s.GlyphIndexToPdfWidth(glyIndex), nil
 	}
 	return 0, ErrCharNotFound
 }
@@ -322,38 +260,4 @@ func (s *SubsetFontObj) GlyphIndexToPdfWidth(glyphIndex uint) uint {
 // GetTTFParser gets TTFParser.
 func (s *SubsetFontObj) GetTTFParser() *core.TTFParser {
 	return &s.ttfp
-}
-
-// GetUnderlineThickness underlineThickness.
-func (s *SubsetFontObj) GetUnderlineThickness() int {
-	return s.ttfp.UnderlineThickness()
-}
-
-func (s *SubsetFontObj) GetUnderlineThicknessPx(fontSize float64) float64 {
-	return (float64(s.ttfp.UnderlineThickness()) / float64(s.ttfp.UnitsPerEm())) * fontSize
-}
-
-// GetUnderlinePosition underline position.
-func (s *SubsetFontObj) GetUnderlinePosition() int {
-	return s.ttfp.UnderlinePosition()
-}
-
-func (s *SubsetFontObj) GetUnderlinePositionPx(fontSize float64) float64 {
-	return (float64(s.ttfp.UnderlinePosition()) / float64(s.ttfp.UnitsPerEm())) * fontSize
-}
-
-func (s *SubsetFontObj) GetAscender() int {
-	return s.ttfp.Ascender()
-}
-
-func (s *SubsetFontObj) GetAscenderPx(fontSize float64) float64 {
-	return (float64(s.ttfp.Ascender()) / float64(s.ttfp.UnitsPerEm())) * fontSize
-}
-
-func (s *SubsetFontObj) GetDescender() int {
-	return s.ttfp.Descender()
-}
-
-func (s *SubsetFontObj) GetDescenderPx(fontSize float64) float64 {
-	return (float64(s.ttfp.Descender()) / float64(s.ttfp.UnitsPerEm())) * fontSize
 }

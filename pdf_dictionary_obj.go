@@ -2,7 +2,6 @@ package gopdf
 
 import (
 	"compress/zlib"
-	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -19,26 +18,14 @@ var EntrySelectors = []int{
 	4, 4, 4, 4, 4, 4, 4,
 }
 
-// ErrNotSupportShortIndexYet not support none short index yet
-var ErrNotSupportShortIndexYet = errors.New("not support none short index yet")
-
 // PdfDictionaryObj pdf dictionary object
 type PdfDictionaryObj struct {
 	PtrToSubsetFontObj *SubsetFontObj
 	//getRoot            func() *GoPdf
-	pdfProtection *PDFProtection
 }
 
 func (p *PdfDictionaryObj) init(funcGetRoot func() *GoPdf) {
 	//p.getRoot = funcGetRoot
-}
-
-func (p *PdfDictionaryObj) setProtection(pr *PDFProtection) {
-	p.pdfProtection = pr
-}
-
-func (p *PdfDictionaryObj) protection() *PDFProtection {
-	return p.pdfProtection
 }
 
 func (p *PdfDictionaryObj) write(w io.Writer, objID int) error {
@@ -64,16 +51,7 @@ func (p *PdfDictionaryObj) write(w io.Writer, objID int) error {
 	fmt.Fprintf(w, "/Length1 %d\n", len(b))
 	io.WriteString(w, ">>\n")
 	io.WriteString(w, "stream\n")
-	if p.protection() != nil {
-		tmp, err := rc4Cip(p.protection().objectkey(objID), zbuff.Bytes())
-		if err != nil {
-			return err
-		}
-		w.Write(tmp)
-		//p.buffer.WriteString("\n")
-	} else {
-		w.Write(zbuff.Bytes())
-	}
+	w.Write(zbuff.Bytes())
 	io.WriteString(w, "\nendstream\n")
 
 	return nil

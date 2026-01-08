@@ -20,11 +20,8 @@ type CellOption struct {
 	Align                  int //Allows to align the text. Possible values are: Left,Center,Right,Top,Bottom,Middle
 	Border                 int //Indicates if borders must be drawn around the cell. Possible values are: Left, Top, Right, Bottom, ALL
 	Float                  int //Indicates where the current position should go after the call. Possible values are: Right, Bottom
-	Transparency           *Transparency
 	CoefUnderlinePosition  float64
 	CoefLineHeight         float64
 	CoefUnderlineThickness float64
 	BreakOption            *BreakOption
-
-	extGStateIndexes []int
 }

@@ -9,19 +9,10 @@ import (
 type UnicodeMap struct {
 	PtrToSubsetFontObj *SubsetFontObj
 	//getRoot            func() *GoPdf
-	pdfProtection *PDFProtection
 }
 
 func (u *UnicodeMap) init(funcGetRoot func() *GoPdf) {
 	//u.getRoot = funcGetRoot
-}
-
-func (u *UnicodeMap) setProtection(p *PDFProtection) {
-	u.pdfProtection = p
-}
-
-func (u *UnicodeMap) protection() *PDFProtection {
-	return u.pdfProtection
 }
 
 // SetPtrToSubsetFontObj set pointer to SubsetFontObj
@@ -83,16 +74,7 @@ func (u *UnicodeMap) write(w io.Writer, objID int) error {
 	fmt.Fprintf(w, "/Length %d\n", buff.Len())
 	io.WriteString(w, ">>\n")
 	io.WriteString(w, "stream\n")
-	if u.protection() != nil {
-		tmp, err := rc4Cip(u.protection().objectkey(objID), buff.Bytes())
-		if err != nil {
-			return err
-		}
-		w.Write(tmp)
-		//streambuff.WriteString("\n")
-	} else {
-		buff.WriteTo(w)
-	}
+	buff.WriteTo(w)
 	io.WriteString(w, "endstream\n")
 
 	return nil

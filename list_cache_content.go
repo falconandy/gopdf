@@ -59,9 +59,9 @@ func (l *listCacheContent) appendContentText(cache cacheContentText, text string
 	return x, y, nil
 }
 
-func (l *listCacheContent) write(w io.Writer, protection *PDFProtection) error {
+func (l *listCacheContent) write(w io.Writer) error {
 	for _, cache := range l.caches {
-		if err := cache.write(w, protection); err != nil {
+		if err := cache.write(w); err != nil {
 			return err
 		}
 	}
