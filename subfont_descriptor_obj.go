@@ -3,8 +3,6 @@ package gopdf
 import (
 	"fmt"
 	"io"
-
-	"github.com/signintech/gopdf/fontmaker/core"
 )
 
 // SubfontDescriptorObj pdf subfont descriptorObj object
@@ -55,5 +53,5 @@ func (s *SubfontDescriptorObj) SetPtrToSubsetFontObj(ptr *SubsetFontObj) {
 
 // DesignUnitsToPdf convert unit
 func DesignUnitsToPdf(val int, unitsPerEm uint) int {
-	return core.Round(float64(float64(val) * 1000.00 / float64(unitsPerEm)))
+	return Round(float64(float64(val) * 1000.00 / float64(unitsPerEm)))
 }

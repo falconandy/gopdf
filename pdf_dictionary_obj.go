@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-
-	"github.com/signintech/gopdf/fontmaker/core"
 )
 
 // EntrySelectors entry selectors
@@ -82,7 +80,7 @@ func (p *PdfDictionaryObj) distinctInts(nn []int) []int {
 
 func (p *PdfDictionaryObj) makeGlyfAndLocaTable() ([]byte, []int, error) {
 	ttfp := p.PtrToSubsetFontObj.GetTTFParser()
-	var glyf core.TableDirectoryEntry
+	var glyf TableDirectoryEntry
 
 	numGlyphs := int(ttfp.NumGlyphs())
 
@@ -162,7 +160,7 @@ func (p *PdfDictionaryObj) getGlyphData(glyph int) []byte {
 func (p *PdfDictionaryObj) makeFont() ([]byte, error) {
 	var buff Buff
 	ttfp := p.PtrToSubsetFontObj.GetTTFParser()
-	tables := make(map[string]core.TableDirectoryEntry)
+	tables := make(map[string]TableDirectoryEntry)
 	tables["cvt "] = ttfp.GetTables()["cvt "] //มีช่องว่างด้วยนะ
 	tables["fpgm"] = ttfp.GetTables()["fpgm"]
 	tables["glyf"] = ttfp.GetTables()["glyf"]

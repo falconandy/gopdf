@@ -523,19 +523,19 @@ func breakIndicatorIndex(text []rune, bi rune) int {
 }
 
 // AddTTFFontByReader adds font data by reader.
-func (gp *GoPdf) AddTTFFontData(family string, fontData []byte) error {
+func (gp *GoPdf) AddTTFFontData(family string, fontData *TTFParser) error {
 	return gp.AddTTFFontDataWithOption(family, fontData, defaultTtfFontOption())
 }
 
 // AddTTFFontDataWithOption adds font data with option.
-func (gp *GoPdf) AddTTFFontDataWithOption(family string, fontData []byte, option TtfOption) error {
+func (gp *GoPdf) AddTTFFontDataWithOption(family string, fontData *TTFParser, option TtfOption) error {
 	subsetFont := new(SubsetFontObj)
 	subsetFont.init(func() *GoPdf {
 		return gp
 	})
 	subsetFont.SetTtfFontOption(option)
 	subsetFont.SetFamily(family)
-	err := subsetFont.SetTTFData(fontData)
+	err := subsetFont.SetTTFParser(fontData)
 	if err != nil {
 		return err
 	}
