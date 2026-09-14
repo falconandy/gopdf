@@ -2,8 +2,6 @@ package gopdf
 
 import (
 	"errors"
-
-	"github.com/signintech/gopdf/fontmaker/core"
 )
 
 // ErrCharNotFound char not found
@@ -14,7 +12,7 @@ var ErrGlyphNotFound = errors.New("glyph not found")
 
 // SubsetFontObj pdf subsetFont object
 type SubsetFontObj struct {
-	ttfp                  core.TTFParser
+	ttfp                  *TTFParser
 	Family                string
 	CharacterToGlyphIndex *MapOfCharacterToGlyphIndex
 	ttfFontOption         TtfOption
@@ -49,13 +47,8 @@ func (s *SubsetFontObj) GetTtfFontOption() TtfOption {
 }
 
 // SetTTFData set ttf
-func (s *SubsetFontObj) SetTTFData(data []byte) error {
-	useKerning := s.ttfFontOption.UseKerning
-	s.ttfp.SetUseKerning(useKerning)
-	err := s.ttfp.ParseFontData(data)
-	if err != nil {
-		return err
-	}
+func (s *SubsetFontObj) SetTTFParser(ttfParser *TTFParser) error {
+	s.ttfp = ttfParser
 	return nil
 }
 
@@ -230,6 +223,6 @@ func (s *SubsetFontObj) GlyphIndexToPdfWidth(glyphIndex uint) uint {
 }
 
 // GetTTFParser gets TTFParser.
-func (s *SubsetFontObj) GetTTFParser() *core.TTFParser {
-	return &s.ttfp
+func (s *SubsetFontObj) GetTTFParser() *TTFParser {
+	return s.ttfp
 }
