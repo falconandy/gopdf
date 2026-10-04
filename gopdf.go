@@ -2,7 +2,6 @@ package gopdf
 
 import (
 	"errors"
-	"fmt"
 )
 
 const subsetFont = "SubsetFont"
@@ -66,7 +65,7 @@ func convertNumericToFloat64(size interface{}) (fontSize float64, err error) {
 	case uint8:
 		return float64(size), nil
 	default:
-		return 0.0, fmt.Errorf("fontSize must be of type (u)int* or float*, not %T", size)
+		return 0.0, errors.New("fontSize must be of type (u)int* or float*")
 	}
 }
 
