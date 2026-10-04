@@ -2,8 +2,6 @@ package gopdf
 
 import (
 	"errors"
-	"fmt"
-	"io"
 
 	"github.com/signintech/gopdf/fontmaker/core"
 )
@@ -19,9 +17,6 @@ type SubsetFontObj struct {
 	ttfp                  core.TTFParser
 	Family                string
 	CharacterToGlyphIndex *MapOfCharacterToGlyphIndex
-	CountOfFont           int
-	indexObjCIDFont       int
-	indexObjUnicodeMap    int
 	ttfFontOption         TtfOption
 	funcGetRoot           func() *GoPdf
 	addCharsBuff          []rune
@@ -31,29 +26,6 @@ func (s *SubsetFontObj) init(funcGetRoot func() *GoPdf) {
 	s.CharacterToGlyphIndex = NewMapOfCharacterToGlyphIndex() //make(map[rune]uint)
 	s.funcGetRoot = funcGetRoot
 
-}
-
-func (s *SubsetFontObj) write(w io.Writer, objID int) error {
-	//me.AddChars("จ")
-	io.WriteString(w, "<<\n")
-	fmt.Fprintf(w, "/BaseFont /%s\n", CreateEmbeddedFontSubsetName(s.Family))
-	fmt.Fprintf(w, "/DescendantFonts [%d 0 R]\n", s.indexObjCIDFont+1)
-	io.WriteString(w, "/Encoding /Identity-H\n")
-	io.WriteString(w, "/Subtype /Type0\n")
-	fmt.Fprintf(w, "/ToUnicode %d 0 R\n", s.indexObjUnicodeMap+1)
-	io.WriteString(w, "/Type /Font\n")
-	io.WriteString(w, ">>\n")
-	return nil
-}
-
-// SetIndexObjCIDFont set IndexObjCIDFont
-func (s *SubsetFontObj) SetIndexObjCIDFont(index int) {
-	s.indexObjCIDFont = index
-}
-
-// SetIndexObjUnicodeMap set IndexObjUnicodeMap
-func (s *SubsetFontObj) SetIndexObjUnicodeMap(index int) {
-	s.indexObjUnicodeMap = index
 }
 
 // SetFamily set font family name

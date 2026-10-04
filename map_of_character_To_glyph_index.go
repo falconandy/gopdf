@@ -55,13 +55,3 @@ func (m *MapOfCharacterToGlyphIndex) Val(k rune) (uint, bool) {
 	}
 	return m.Vals[i], true
 }
-
-// AllKeys get keys
-func (m *MapOfCharacterToGlyphIndex) AllKeys() []rune {
-	return m.Keys
-}
-
-// AllVals get all values
-func (m *MapOfCharacterToGlyphIndex) AllVals() []uint {
-	return m.Vals
-}
