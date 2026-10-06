@@ -1,6 +1,7 @@
 package gopdf
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 )
@@ -24,7 +25,7 @@ func (u *UnicodeMap) getType() string {
 	return "Unicode"
 }
 
-func (u *UnicodeMap) write(w io.Writer, objID int) error {
+func (u *UnicodeMap) Write(w io.Writer) error {
 	//stream
 	//characterToGlyphIndex := u.PtrToSubsetFontObj.CharacterToGlyphIndex
 	prefix :=
@@ -53,8 +54,7 @@ func (u *UnicodeMap) write(w io.Writer, objID int) error {
 		glyphIndexToCharacter.set(index, k)
 	}
 
-	buff := GetBuffer()
-	defer PutBuffer(buff)
+	buff := new(bytes.Buffer)
 
 	buff.WriteString(prefix)
 	buff.WriteString("1 begincodespacerange\n")

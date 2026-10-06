@@ -1,6 +1,7 @@
 package gopdf
 
 import (
+	"bytes"
 	"compress/zlib"
 	"fmt"
 	"io"
@@ -26,7 +27,7 @@ func (p *PdfDictionaryObj) init(funcGetRoot func() *GoPdf) {
 	//p.getRoot = funcGetRoot
 }
 
-func (p *PdfDictionaryObj) write(w io.Writer, objID int) error {
+func (p *PdfDictionaryObj) Write(w io.Writer) error {
 	b, err := p.makeFont()
 	if err != nil {
 		//log.Panicf("%s", err.Error())
@@ -34,8 +35,7 @@ func (p *PdfDictionaryObj) write(w io.Writer, objID int) error {
 	}
 
 	//zipvar buff bytes.Buffer
-	zbuff := GetBuffer()
-	defer PutBuffer(zbuff)
+	zbuff := new(bytes.Buffer)
 
 	gzipwriter := zlib.NewWriter(zbuff)
 	_, err = gzipwriter.Write(b)
